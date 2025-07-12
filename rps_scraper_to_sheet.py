@@ -43,63 +43,40 @@ def get_google_sheet(sheet_id, sheet_name):
 # === SCRAPE RPS TABLE FOR TODAY
 def scrape_rps_data():
     all_data = []
-    print("🌐 Launching Playwright (headless)...")
+    print("🚀 Launching browser...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)  # Use headless=True for automation
         context = browser.new_context()
         page = context.new_page()
 
-        print("🌐 Navigating to parent page...")
+        # Step 1: Go to the page
+        print("🌐 Navigating to page...")
         page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="load")
-        page.wait_for_timeout(4000)
+        page.wait_for_timeout(5000)
 
-        print("🔍 Locating iframe...")
-        frame = page.frame_by_url(re.compile(r".*Safex_RPS_Reports_Details\.aspx.*"))
-        if not frame:
-            raise Exception("❌ Iframe not found!")
-
-        print("📅 Clicking From Date input to open calendar...")
-        frame.click('input[id="ctl00_ContentPlaceHolder1_dtFrom"]')
+        # Step 2: Click dropdown and select all vehicles
+        print("🚛 Clicking vehicle dropdown...")
+        page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[2]').click()
         page.wait_for_timeout(1000)
 
-        print("⏪ Clicking previous month arrow...")
-        frame.locator('//div[contains(@class,"xdsoft_datepicker")]//button[contains(@class,"xdsoft_prev")]').nth(0).click()
+        print("✅ Selecting all vehicles...")
+        page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[3]/div[2]/ul/li[1]/input').click()
+        page.wait_for_timeout(1000)
+
+        # Step 3: Open date picker and select today's date
+        print("📅 Clicking date picker...")
+        page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[1]/div[2]/input').click()
         page.wait_for_timeout(1000)
 
         today = datetime.now()
         day_xpath = f'//td[@data-date="{today.day}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
-        print(f"📅 Selecting today's day: {today.day}")
-        frame.locator(day_xpath).nth(0).click()
+        print(f"📅 Selecting day: {today.day}")
+        page.locator(f'xpath={day_xpath}').nth(0).click()
         page.wait_for_timeout(1000)
 
-        print("🚛 Selecting all vehicles...")
-        vehicle_select = frame.locator('select[id="ctl00_ContentPlaceHolder1_ddlVehicle"]')
-        options = vehicle_select.locator('option').all()
-        for option in options:
-            option.click()
-
-        print("📤 Clicking Submit...")
-        frame.click('input[id="ctl00_ContentPlaceHolder1_btnSubmit"]')
-        page.wait_for_timeout(5000)
-
-        print("🔍 Waiting for results table...")
-        try:
-            frame.wait_for_selector('table[id="ctl00_ContentPlaceHolder1_gvReport"] tbody tr', timeout=10000)
-            rows = frame.locator('table[id="ctl00_ContentPlaceHolder1_gvReport"] tbody tr').all()
-            print(f"✅ Found {len(rows)} rows")
-
-            for row in rows:
-                cells = row.locator('td').all()
-                data = [cell.inner_text().strip() for cell in cells]
-                all_data.append(data)
-
-        except Exception as e:
-            print(f"❌ Failed to load table: {e}")
+        print("✅ Done.")
 
         browser.close()
-
-    print(f"🏁 Finished scraping. Total records: {len(all_data)}")
-    return all_data
 # === WRITE TO GOOGLE SHEET ===
 def write_to_sheet(sheet_id, sheet_name, data, header=None):
     print("📥 Preparing to write to Google Sheet...")
