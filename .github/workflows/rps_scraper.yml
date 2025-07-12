@@ -1,9 +1,9 @@
 name: RPS Excel Scraper
 
 on:
-  workflow_dispatch:  # run manually from GitHub UI
+  workflow_dispatch:  # manually triggered
   schedule:
-    - cron: '0 5 * * *'  # optional: run every day at 5:00 AM UTC
+    - cron: '0 5 * * *'  # optional: daily at 10:30 AM IST
 
 jobs:
   scrape-and-download:
@@ -27,8 +27,8 @@ jobs:
       run: |
         playwright install --with-deps
 
-    - name: 📂 Create download directory
+    - name: 📂 Create Download Directory
       run: mkdir -p downloads
 
-    - name: 🚀 Run RPS Scraper
-      run: python scripts/rps_scraper_to_sheet.py
+    - name: 🚀 Run RPS Excel Scraper
+      run: python rps_scraper_to_sheet.py
