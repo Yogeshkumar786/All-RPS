@@ -49,28 +49,43 @@ def scrape_rps_data():
         context = browser.new_context()
         page = context.new_page()
 
-        print("🌐 Navigating to page...")
-        page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="domcontentloaded")
+        print("🌐 Navigating to parent page...")
+        page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="load")
+        page.wait_for_timeout(4000)
 
-        today = datetime.today().strftime("%d-%m-%Y")
-        print(f"📅 Filling From/To Date: {today}")
-        page.fill('xpath=//input[@id="ctl00_ContentPlaceHolder1_dtFrom"]', today)
-        page.fill('xpath=//input[@id="ctl00_ContentPlaceHolder1_dtTo"]', today)
+        print("🔍 Locating iframe...")
+        frame = page.frame_by_url(re.compile(r".*Safex_RPS_Reports_Details\.aspx.*"))
+        if not frame:
+            raise Exception("❌ Iframe not found!")
+
+        print("📅 Clicking From Date input to open calendar...")
+        frame.click('input[id="ctl00_ContentPlaceHolder1_dtFrom"]')
+        page.wait_for_timeout(1000)
+
+        print("⏪ Clicking previous month arrow...")
+        frame.locator('//div[contains(@class,"xdsoft_datepicker")]//button[contains(@class,"xdsoft_prev")]').nth(0).click()
+        page.wait_for_timeout(1000)
+
+        today = datetime.now()
+        day_xpath = f'//td[@data-date="{today.day}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
+        print(f"📅 Selecting today's day: {today.day}")
+        frame.locator(day_xpath).nth(0).click()
+        page.wait_for_timeout(1000)
 
         print("🚛 Selecting all vehicles...")
-        vehicle_select = page.locator('xpath=//select[@id="ctl00_ContentPlaceHolder1_ddlVehicle"]')
+        vehicle_select = frame.locator('select[id="ctl00_ContentPlaceHolder1_ddlVehicle"]')
         options = vehicle_select.locator('option').all()
         for option in options:
             option.click()
 
         print("📤 Clicking Submit...")
-        page.click('xpath=//input[@id="ctl00_ContentPlaceHolder1_btnSubmit"]')
-        page.wait_for_timeout(5000)  # Allow time for table to load
+        frame.click('input[id="ctl00_ContentPlaceHolder1_btnSubmit"]')
+        page.wait_for_timeout(5000)
 
-        print("🔍 Waiting for table...")
+        print("🔍 Waiting for results table...")
         try:
-            page.wait_for_selector('xpath=//table[@id="ctl00_ContentPlaceHolder1_gvReport"]/tbody/tr', timeout=10000)
-            rows = page.locator('xpath=//table[@id="ctl00_ContentPlaceHolder1_gvReport"]/tbody/tr').all()
+            frame.wait_for_selector('table[id="ctl00_ContentPlaceHolder1_gvReport"] tbody tr', timeout=10000)
+            rows = frame.locator('table[id="ctl00_ContentPlaceHolder1_gvReport"] tbody tr').all()
             print(f"✅ Found {len(rows)} rows")
 
             for row in rows:
@@ -79,12 +94,12 @@ def scrape_rps_data():
                 all_data.append(data)
 
         except Exception as e:
-            print(f"❌ Could not load data table: {e}")
+            print(f"❌ Failed to load table: {e}")
 
         browser.close()
-    print(f"🏁 Scraping complete. Total records: {len(all_data)}")
-    return all_data
 
+    print(f"🏁 Finished scraping. Total records: {len(all_data)}")
+    return all_data
 # === WRITE TO GOOGLE SHEET ===
 def write_to_sheet(sheet_id, sheet_name, data, header=None):
     print("📥 Preparing to write to Google Sheet...")
