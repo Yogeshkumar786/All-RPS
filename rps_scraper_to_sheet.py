@@ -45,7 +45,7 @@ def scrape_rps_data():
     all_data = []
     print("🚀 Launching browser...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # Use headless=True for automation
+        browser = p.chromium.launch(headless=True)  # Use headless=True for automation
         context = browser.new_context()
         page = context.new_page()
 
