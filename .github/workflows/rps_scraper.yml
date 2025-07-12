@@ -31,4 +31,4 @@ jobs:
       run: mkdir -p downloads
 
     - name: 🚀 Run RPS Scraper
-      run: python scripts/rps_scraper.py
+      run: python scripts/rps_scraper_to_sheet.py
