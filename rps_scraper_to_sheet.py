@@ -15,6 +15,14 @@ load_dotenv()
 # === LOGGING SETUP ===
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# === WRITE SERVICE ACCOUNT CREDENTIALS FILE FROM GITHUB SECRET ===
+def write_temp_credentials_from_env():
+    json_str = os.environ.get("GCP_CREDS_JSON")
+    if not json_str:
+        raise ValueError("GCP_CREDS_JSON not found in environment.")
+    with open("credentials.json", "w") as f:
+        f.write(json_str)
+
 # === RETRY WRAPPER ===
 def retry_gspread_request(func, *args, retries=5, delay=2, **kwargs):
     for attempt in range(retries):
@@ -33,18 +41,17 @@ def retry_gspread_request(func, *args, retries=5, delay=2, **kwargs):
 def get_google_sheet(sheet_id, sheet_name):
     print("🔐 Authenticating with Google Sheets...")
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
-    creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
     client = gspread.authorize(creds)
     sheet = retry_gspread_request(lambda: client.open_by_key(sheet_id).worksheet(sheet_name))
     print("✅ Google Sheet accessed successfully.")
     return sheet
 
-# === SCRAPE RPS TABLE FOR TODAY
+# === SCRAPE RPS TABLE FOR TODAY AND RETURN DATA ===
 def scrape_rps_data():
-    all_data = []
     print("🚀 Starting RPS extraction via Excel download...")
-    
+    all_data = []
+
     download_dir = os.path.abspath("downloads")
     os.makedirs(download_dir, exist_ok=True)
 
@@ -79,7 +86,7 @@ def scrape_rps_data():
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[5]/div/button').click()
         page.wait_for_timeout(5000)
 
-        # Step 5: Wait for page data to load fully (you can increase timeout if needed)
+        # Step 5: Wait for results to load
         print("⌛ Waiting for result page to load...")
         page.wait_for_timeout(4000)
 
@@ -94,14 +101,18 @@ def scrape_rps_data():
 
         browser.close()
 
-    # Step 7: Extract and print data
+    # Step 7: Extract rows
     try:
         df = pd.read_excel(downloaded_file_path)
         print("📊 Excel data preview:")
-        print(df.head())  # Show first 5 rows
+        print(df.head())
+        data = df.values.tolist()
         print("✅ working")
+        return data
     except Exception as e:
         print(f"❌ Failed to read Excel: {e}")
+        return []
+
 # === WRITE TO GOOGLE SHEET ===
 def write_to_sheet(sheet_id, sheet_name, data, header=None):
     print("📥 Preparing to write to Google Sheet...")
@@ -111,14 +122,18 @@ def write_to_sheet(sheet_id, sheet_name, data, header=None):
     if header:
         print("🧾 Writing headers...")
         retry_gspread_request(sheet.insert_row, header, 1)
-    print(f"📝 Inserting {len(data)} rows...")
-    retry_gspread_request(sheet.insert_rows, data, 2 if header else 1)
-    print("✅ Data successfully written to Google Sheet.")
+    if data:
+        print(f"📝 Inserting {len(data)} rows...")
+        retry_gspread_request(sheet.insert_rows, data, 2 if header else 1)
+        print("✅ Data successfully written to Google Sheet.")
+    else:
+        print("⚠️ No data to write.")
 
 # === MAIN ===
 if __name__ == "__main__":
     print("🚀 RPS scraping started.")
     try:
+        write_temp_credentials_from_env()  # <- 🔐 inject credentials.json from GitHub secret
         rps_data = scrape_rps_data()
         headers = [
             "RPS Number", "Vehicle Number", "Dispatch Date", "Closure Date",
