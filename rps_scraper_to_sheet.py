@@ -40,7 +40,7 @@ def get_google_sheet(sheet_id, sheet_name):
     print("✅ Google Sheet accessed successfully.")
     return sheet
 
-# === SCRAPE RPS TABLE FOR TODAY ===
+# === SCRAPE RPS TABLE FOR TODAY
 def scrape_rps_data():
     all_data = []
     print("🌐 Launching Playwright (headless)...")
@@ -49,49 +49,40 @@ def scrape_rps_data():
         context = browser.new_context()
         page = context.new_page()
 
-        print("🌐 Navigating to RPS Reports page...")
+        print("🌐 Navigating to page...")
         page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="domcontentloaded")
 
         today = datetime.today().strftime("%d-%m-%Y")
-        print(f"📅 Filling date: {today}")
-        page.fill('input[formcontrolname="FromDate"]', today)
-        page.fill('input[formcontrolname="ToDate"]', today)
+        print(f"📅 Filling From/To Date: {today}")
+        page.fill('xpath=//input[@id="ctl00_ContentPlaceHolder1_dtFrom"]', today)
+        page.fill('xpath=//input[@id="ctl00_ContentPlaceHolder1_dtTo"]', today)
 
         print("🚛 Selecting all vehicles...")
-        page.click('input[formcontrolname="VehicleList"]')
-        page.keyboard.press('Control+A')
-        page.keyboard.press('Enter')
+        vehicle_select = page.locator('xpath=//select[@id="ctl00_ContentPlaceHolder1_ddlVehicle"]')
+        options = vehicle_select.locator('option').all()
+        for option in options:
+            option.click()
 
-        print("📤 Submitting filter form...")
-        page.click('button:has-text("Submit")')
-        page.wait_for_timeout(5000)
+        print("📤 Clicking Submit...")
+        page.click('xpath=//input[@id="ctl00_ContentPlaceHolder1_btnSubmit"]')
+        page.wait_for_timeout(5000)  # Allow time for table to load
 
-        page_num = 1
-        while True:
-            print(f"📄 Scraping Page {page_num}...")
-            try:
-                page.wait_for_selector('table tbody tr', timeout=10000)
-            except Exception as e:
-                print(f"⚠️ Table not found on page {page_num}: {e}")
-                break
+        print("🔍 Waiting for table...")
+        try:
+            page.wait_for_selector('xpath=//table[@id="ctl00_ContentPlaceHolder1_gvReport"]/tbody/tr', timeout=10000)
+            rows = page.locator('xpath=//table[@id="ctl00_ContentPlaceHolder1_gvReport"]/tbody/tr').all()
+            print(f"✅ Found {len(rows)} rows")
 
-            rows = page.query_selector_all('table tbody tr')
             for row in rows:
-                cells = row.query_selector_all('td')
+                cells = row.locator('td').all()
                 data = [cell.inner_text().strip() for cell in cells]
                 all_data.append(data)
 
-            next_button = page.query_selector('li.pagination-next:not(.disabled)')
-            if not next_button or 'disabled' in next_button.get_attribute("class"):
-                print("✅ No more pages.")
-                break
-            else:
-                next_button.click()
-                page.wait_for_timeout(2000)
-                page_num += 1
+        except Exception as e:
+            print(f"❌ Could not load data table: {e}")
 
         browser.close()
-    print(f"✅ Finished scraping. Total records: {len(all_data)}")
+    print(f"🏁 Scraping complete. Total records: {len(all_data)}")
     return all_data
 
 # === WRITE TO GOOGLE SHEET ===
