@@ -65,6 +65,9 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("📥 Reading Excel...")
     df = pd.read_excel(excel_path)
 
+    # ✅ Clean data for Google Sheets API (no NaN, Inf, etc.)
+    df_clean = df.replace([float("inf"), float("-inf")], "").fillna("")
+
     print("🔐 Authorizing with Google Sheets...")
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
@@ -77,7 +80,7 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     sheet.clear()
 
     print("📤 Uploading new data...")
-    rows = [df.columns.values.tolist()] + df.values.tolist()
+    rows = [df_clean.columns.tolist()] + df_clean.values.tolist()
     sheet.insert_rows(rows, row=1)
 
     print("✅ Sheet updated successfully.")
