@@ -3,6 +3,7 @@ from datetime import datetime
 import time
 import logging
 import os
+import re
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread.exceptions import APIError
@@ -41,49 +42,55 @@ def scrape_rps_data():
         context = browser.new_context()
         page = context.new_page()
 
-        print("🌐 Navigating to RPS Reports page...")
-        page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="domcontentloaded")
-
-        today = datetime.today().strftime("%d-%m-%Y")
-        print(f"📅 Filling date: {today}")
-        page.fill('input[formcontrolname="FromDate"]', today)
-        page.fill('input[formcontrolname="ToDate"]', today)
-
-        print("🚛 Selecting all vehicles...")
-        page.click('input[formcontrolname="VehicleList"]')
-        page.keyboard.press('Control+A')
-        page.keyboard.press('Enter')
-
-        print("📤 Submitting filter form...")
-        page.click('button:has-text("Submit")')
+        print("🌐 Navigating to parent page...")
+        page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="load")
         page.wait_for_timeout(5000)
 
-        page_num = 1
-        while True:
-            print(f"📄 Scraping Page {page_num}...")
-            try:
-                page.wait_for_selector('table tbody tr', timeout=10000)
-            except Exception as e:
-                print(f"⚠️ Table not found on page {page_num}: {e}")
-                break
+        print("🔍 Locating iframe...")
+        frame = page.frame_by_url(re.compile(r".*Safex_RPS_Reports_Details\.aspx.*"))
+        if not frame:
+            raise Exception("❌ Iframe not found!")
 
-            rows = page.query_selector_all('table tbody tr')
+        print("📅 Clicking FromDate input...")
+        frame.click('input[id="ctl00_ContentPlaceHolder1_dtFrom"]')
+        page.wait_for_timeout(1000)
+
+        today = datetime.today()
+        day_xpath = f'//td[@data-date="{today.day}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
+        print(f"📅 Selecting date using XPath: {day_xpath}")
+        try:
+            frame.locator(f'xpath={day_xpath}').click()
+            print("✅ FromDate selected successfully.")
+        except Exception as e:
+            raise Exception(f"❌ Failed to click calendar date: {e}")
+
+        print("🚛 Selecting all vehicles...")
+        vehicle_select = frame.locator('select[id="ctl00_ContentPlaceHolder1_ddlVehicle"]')
+        options = vehicle_select.locator('option').all()
+        for option in options:
+            option.click()
+
+        print("📤 Clicking Submit...")
+        frame.click('input[id="ctl00_ContentPlaceHolder1_btnSubmit"]')
+        page.wait_for_timeout(5000)
+
+        print("🔍 Waiting for results table...")
+        try:
+            frame.wait_for_selector('table[id="ctl00_ContentPlaceHolder1_gvReport"] tbody tr', timeout=10000)
+            rows = frame.locator('table[id="ctl00_ContentPlaceHolder1_gvReport"] tbody tr').all()
+            print(f"✅ Found {len(rows)} rows")
+
             for row in rows:
-                cells = row.query_selector_all('td')
+                cells = row.locator('td').all()
                 data = [cell.inner_text().strip() for cell in cells]
                 all_data.append(data)
 
-            next_button = page.query_selector('li.pagination-next:not(.disabled)')
-            if not next_button or 'disabled' in next_button.get_attribute("class"):
-                print("✅ No more pages.")
-                break
-            else:
-                next_button.click()
-                page.wait_for_timeout(2000)
-                page_num += 1
+        except Exception as e:
+            print(f"❌ Failed to load table: {e}")
 
         browser.close()
-    print(f"✅ Finished scraping. Total records: {len(all_data)}")
+
+    print(f"🏁 Finished scraping. Total records: {len(all_data)}")
     return all_data
 
 def write_to_sheet(sheet_id, sheet_name, data, header=None):
