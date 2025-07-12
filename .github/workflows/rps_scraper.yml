@@ -1,14 +1,16 @@
 name: RPS Scraper Runner
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
+  schedule:
+    - cron: '15 2 * * *'  # every day at 7:45 AM IST
 
 jobs:
   run-rps-scraper:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout repository
+      - name: ⬇️ Checkout code
         uses: actions/checkout@v3
 
       - name: 🐍 Set up Python
@@ -22,8 +24,14 @@ jobs:
           pip install -r requirements.txt
           playwright install --with-deps
 
-      - name: 🔐 Create credentials.json from secret
-        run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > credentials.json
+      - name: 🔐 Set up Google Credentials from Secret
+        run: |
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /dev/null  # just to reference
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
-      - name: 🚀 Run the scraper
-        run: python rps_scraper_to_sheet.py
+      - name: 🏃 Run scraper script
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        run: |
+          xvfb-run --auto-servernum -- python rps_scraper_to_sheet.py
