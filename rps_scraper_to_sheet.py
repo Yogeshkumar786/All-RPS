@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # === WRITE SERVICE ACCOUNT CREDENTIALS FILE FROM GITHUB SECRET ===
 def write_temp_credentials_from_env():
-    json_str = os.environ.get("GCP_CREDS_JSON")
+    json_str = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if not json_str:
         raise ValueError("GCP_CREDS_JSON not found in environment.")
     with open("credentials.json", "w") as f:
