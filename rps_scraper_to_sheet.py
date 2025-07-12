@@ -3,7 +3,7 @@ import os
 import json
 import time
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -37,13 +37,11 @@ def download_and_extract_rps_data():
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[3]/div[2]/ul/li[1]/input').click()
         page.wait_for_timeout(1000)
 
-        print("📅 Picking today's date...")
-        page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[1]/div[2]/input').click()
-        page.wait_for_timeout(1000)
-        today = datetime.now()
-        day_xpath = f'//td[@data-date="{today.day}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
-        page.locator(f'xpath={day_xpath}').nth(0).click()
-        page.wait_for_timeout(1000)
+        print("📅 Picking date range (last 15 days)...")
+        from_date = (datetime.now() - timedelta(days=15)).strftime("%d-%m-%Y")
+        to_date = datetime.now().strftime("%d-%m-%Y")
+        page.locator('input[id="ctl00_ContentPlaceHolder1_dtFrom"]').fill(from_date)
+        page.locator('input[id="ctl00_ContentPlaceHolder1_dtTo"]').fill(to_date)
 
         print("📤 Clicking Submit...")
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[5]/div/button').click()
@@ -60,12 +58,10 @@ def download_and_extract_rps_data():
         browser.close()
         return downloaded_file_path
 
-# === Step 3: Push Excel data to Google Sheet ===
+# === Step 3: Push Excel data to Google Sheet (skip duplicates) ===
 def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("📥 Reading Excel...")
     df = pd.read_excel(excel_path)
-
-    # ✅ Clean data for Google Sheets API (no NaN, Inf, etc.)
     df_clean = df.replace([float("inf"), float("-inf")], "").fillna("")
 
     print("🔐 Authorizing with Google Sheets...")
@@ -76,14 +72,21 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("📄 Opening sheet...")
     sheet = client.open_by_key(sheet_id).worksheet(tab_name)
 
-    print("🧹 Clearing sheet...")
-    sheet.clear()
+    print("📑 Fetching existing RPS Numbers...")
+    existing_data = sheet.get_all_records()
+    existing_rps_set = set(str(row.get("RPS Number", "")).strip() for row in existing_data)
 
-    print("📤 Uploading new data...")
-    rows = [df_clean.columns.tolist()] + df_clean.values.tolist()
-    sheet.insert_rows(rows, row=1)
+    print("🧹 Filtering out already existing rows...")
+    filtered_rows = df_clean[~df_clean["RPS Number"].astype(str).isin(existing_rps_set)]
 
-    print("✅ Sheet updated successfully.")
+    if filtered_rows.empty:
+        print("ℹ️ No new RPS records to add.")
+        return
+
+    print("📤 Uploading new RPS records...")
+    rows_to_add = filtered_rows.values.tolist()
+    sheet.append_rows(rows_to_add)
+    print(f"✅ Added {len(rows_to_add)} new rows to the sheet.")
 
 # === MAIN ===
 if __name__ == "__main__":
