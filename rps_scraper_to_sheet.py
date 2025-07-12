@@ -1,39 +1,14 @@
-import pandas as pd
-from datetime import datetime
-import time
-import logging
 import os
 import re
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from gspread.exceptions import APIError
+import time
+import json
+from datetime import datetime
 from playwright.sync_api import sync_playwright
+import gspread
+from gspread.exceptions import APIError
+from oauth2client.service_account import ServiceAccountCredentials
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-def retry_gspread_request(func, *args, retries=5, delay=2, **kwargs):
-    for attempt in range(retries):
-        try:
-            return func(*args, **kwargs)
-        except APIError as e:
-            if "503" in str(e):
-                logging.warning(f"[{attempt + 1}/{retries}] 503 APIError. Retrying in {delay} seconds...")
-                time.sleep(delay)
-                delay *= 2
-            else:
-                raise
-    raise Exception("Max retries exceeded for gspread request.")
-
-def get_google_sheet(sheet_id, sheet_name):
-    print("🔐 Authenticating with Google Sheets...")
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    credentials_path = "credentials.json"
-    creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scope)
-    client = gspread.authorize(creds)
-    sheet = retry_gspread_request(lambda: client.open_by_key(sheet_id).worksheet(sheet_name))
-    print("✅ Google Sheet accessed successfully.")
-    return sheet
-
+# === STEP 1: Scrape data from RPS site ===
 def scrape_rps_data():
     all_data = []
     print("🌐 Launching Playwright (headless)...")
@@ -93,29 +68,56 @@ def scrape_rps_data():
     print(f"🏁 Finished scraping. Total records: {len(all_data)}")
     return all_data
 
-def write_to_sheet(sheet_id, sheet_name, data, header=None):
-    print("📥 Preparing to write to Google Sheet...")
-    sheet = get_google_sheet(sheet_id, sheet_name)
-    print("🧹 Clearing existing data...")
+
+# === STEP 2: Google Sheet upload helpers ===
+def retry_gspread_request(func, *args, retries=5, delay=2, **kwargs):
+    for attempt in range(retries):
+        try:
+            return func(*args, **kwargs)
+        except APIError as e:
+            if "503" in str(e):
+                print(f"[{attempt + 1}/{retries}] 503 error. Retrying in {delay} seconds...")
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
+    raise Exception("Max retries exceeded for gspread request.")
+
+def write_to_google_sheet(sheet_id, sheet_name, data, header=None):
+    print("🔐 Authorizing Google Sheets client...")
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+    creds_dict = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+
+    sheet = retry_gspread_request(lambda: client.open_by_key(sheet_id).worksheet(sheet_name))
+
+    print("🧹 Clearing sheet...")
     retry_gspread_request(sheet.clear)
     if header:
-        print("🧾 Writing headers...")
+        print("📝 Writing headers...")
         retry_gspread_request(sheet.insert_row, header, 1)
-    print(f"📝 Inserting {len(data)} rows...")
+    print(f"📥 Inserting {len(data)} rows...")
     retry_gspread_request(sheet.insert_rows, data, 2 if header else 1)
-    print("✅ Data successfully written to Google Sheet.")
+    print("✅ Data written to Google Sheet.")
 
+
+# === MAIN RUNNER ===
 if __name__ == "__main__":
     print("🚀 RPS scraping started.")
     try:
         rps_data = scrape_rps_data()
+
         headers = [
             "RPS Number", "Vehicle Number", "Dispatch Date", "Closure Date",
-            "Transit Time(HH:MM:SS)", "Route Name", "Carrier Name", "Closure Location"
+            "Transit Time", "Route Name", "Target Time", "Extra"
         ]
+
         SHEET_ID = "1VyuRPidEfJkXk1xtn2uSmKGgcb8df90Wwx_TJ9qBLw0"
         SHEET_NAME = "All_RPS"
-        write_to_sheet(SHEET_ID, SHEET_NAME, rps_data, headers)
+
+        write_to_google_sheet(SHEET_ID, SHEET_NAME, rps_data, headers)
     except Exception as e:
         print(f"❌ ERROR: {e}")
     print("🏁 Script completed.")
