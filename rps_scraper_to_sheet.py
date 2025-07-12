@@ -43,40 +43,65 @@ def get_google_sheet(sheet_id, sheet_name):
 # === SCRAPE RPS TABLE FOR TODAY
 def scrape_rps_data():
     all_data = []
-    print("🚀 Launching browser...")
+    print("🚀 Starting RPS extraction via Excel download...")
+    
+    download_dir = os.path.abspath("downloads")
+    os.makedirs(download_dir, exist_ok=True)
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # Use headless=True for automation
-        context = browser.new_context()
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context(accept_downloads=True)
         page = context.new_page()
 
-        # Step 1: Go to the page
-        print("🌐 Navigating to page...")
+        # Step 1: Load the page
+        print("🌐 Navigating to RPS page...")
         page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="load")
-        page.wait_for_timeout(5000)
+        page.wait_for_timeout(4000)
 
-        # Step 2: Click dropdown and select all vehicles
-        print("🚛 Clicking vehicle dropdown...")
+        # Step 2: Select all vehicles
+        print("🚛 Selecting all vehicles...")
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[2]').click()
         page.wait_for_timeout(1000)
-
-        print("✅ Selecting all vehicles...")
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[3]/div[2]/ul/li[1]/input').click()
         page.wait_for_timeout(1000)
 
-        # Step 3: Open date picker and select today's date
-        print("📅 Clicking date picker...")
+        # Step 3: Pick today's date
+        print("📅 Picking today's date...")
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[1]/div[2]/input').click()
         page.wait_for_timeout(1000)
-
         today = datetime.now()
         day_xpath = f'//td[@data-date="{today.day}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
-        print(f"📅 Selecting day: {today.day}")
         page.locator(f'xpath={day_xpath}').nth(0).click()
         page.wait_for_timeout(1000)
 
-        print("✅ Done.")
+        # Step 4: Click submit
+        print("📤 Clicking Submit...")
+        page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[5]/div/button').click()
+        page.wait_for_timeout(5000)
+
+        # Step 5: Wait for page data to load fully (you can increase timeout if needed)
+        print("⌛ Waiting for result page to load...")
+        page.wait_for_timeout(4000)
+
+        # Step 6: Download Excel
+        print("📥 Clicking download button...")
+        with page.expect_download() as download_info:
+            page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[4]/div/table/div/div[4]/div/div/div[3]/div[1]/div/div/div').click()
+        download = download_info.value
+        downloaded_file_path = os.path.join(download_dir, download.suggested_filename)
+        download.save_as(downloaded_file_path)
+        print(f"✅ Excel downloaded to: {downloaded_file_path}")
 
         browser.close()
+
+    # Step 7: Extract and print data
+    try:
+        df = pd.read_excel(downloaded_file_path)
+        print("📊 Excel data preview:")
+        print(df.head())  # Show first 5 rows
+        print("✅ working")
+    except Exception as e:
+        print(f"❌ Failed to read Excel: {e}")
 # === WRITE TO GOOGLE SHEET ===
 def write_to_sheet(sheet_id, sheet_name, data, header=None):
     print("📥 Preparing to write to Google Sheet...")
