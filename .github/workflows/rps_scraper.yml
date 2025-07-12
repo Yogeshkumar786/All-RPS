@@ -1,37 +1,33 @@
-name: RPS Scraper Runner
+name: RPS Excel to Google Sheet
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '15 2 * * *'  # every day at 7:45 AM IST
+  workflow_dispatch:  # allows manual run from GitHub Actions tab
 
 jobs:
   run-rps-scraper:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout code
-        uses: actions/checkout@v3
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v3
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      - name: 📦 Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          playwright install --with-deps
+    - name: 📦 Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-      - name: 🔐 Set up Google Credentials from Secret
-        run: |
-          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /dev/null  # just to reference
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+    - name: ⚙️ Install Playwright Browsers
+      run: playwright install --with-deps
 
-      - name: 🏃 Run scraper script
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-        run: |
-          xvfb-run --auto-servernum -- python rps_scraper_to_sheet.py
+    - name: 📂 Create Downloads Directory
+      run: mkdir -p downloads
+
+    - name: 🚀 Run Scraper Script
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+      run: python rps_scraper_to_sheet.py
