@@ -62,7 +62,7 @@ def download_and_extract_rps_data():
         browser.close()
         return downloaded_file_path
 
-# === Step 3: Push Excel data to Google Sheet (skip duplicates) ===
+# === Step 3: Push Excel data to Google Sheet (skip duplicates, require Closure Date) ===
 def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("📥 Reading Excel...")
     df = pd.read_excel(excel_path)
@@ -80,15 +80,21 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     existing_data = sheet.get_all_records()
     existing_rps_set = set(str(row.get("RPS Number", "")).strip() for row in existing_data)
 
-    print("🧹 Filtering out already existing rows...")
+    print("🧹 Filtering out duplicates and rows with missing Closure Date...")
     filtered_rows = df_clean[~df_clean["RPS Number"].astype(str).isin(existing_rps_set)]
+    filtered_rows = filtered_rows[filtered_rows["Closure Date"].astype(str).str.strip() != ""]
 
     if filtered_rows.empty:
         print("ℹ️ No new RPS records to add.")
         return
 
+    print("📊 Sorting rows by Closure Date...")
+    if "Closure Date" in filtered_rows.columns:
+        filtered_rows["Closure Date"] = pd.to_datetime(filtered_rows["Closure Date"], errors="coerce")
+        filtered_rows = filtered_rows.sort_values("Closure Date")
+
     print("📤 Uploading new RPS records...")
-    rows_to_add = filtered_rows.values.tolist()
+    rows_to_add = filtered_rows.astype(str).values.tolist()
     sheet.append_rows(rows_to_add)
     print(f"✅ Added {len(rows_to_add)} new rows to the sheet.")
 
