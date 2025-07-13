@@ -49,11 +49,18 @@ def download_and_extract_rps_data():
 
         print("📤 Clicking Submit...")
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[5]/div/button').click()
-        page.wait_for_timeout(5000)
-
+        print("⌛ Waiting for result table to load...")
+        page.wait_for_selector('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[4]/div/table/div/div[6]/div', timeout=15000)
+        
         print("📥 Clicking download button...")
         with page.expect_download() as download_info:
             page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[4]/div/table/div/div[4]/div/div/div[3]/div[1]/div/div/div').click()
+
+        # page.wait_for_timeout(5000)
+
+        # print("📥 Clicking download button...")
+        # with page.expect_download() as download_info:
+        #     page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[4]/div/table/div/div[4]/div/div/div[3]/div[1]/div/div/div').click()
         download = download_info.value
         downloaded_file_path = os.path.join(download_dir, download.suggested_filename)
         download.save_as(downloaded_file_path)
