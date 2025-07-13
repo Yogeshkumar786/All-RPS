@@ -38,7 +38,7 @@ def download_and_extract_rps_data():
         page.wait_for_timeout(1000)
 
         print("📅 Picking date range (last 15 days)...")
-        from_date = (datetime.now() - timedelta(days=15)).day
+        from_date = (datetime.now() - timedelta(days=12)).day
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[1]/div[2]/input').click()
         page.wait_for_timeout(1000)
         page.locator('//div[contains(@class,"xdsoft_datepicker")]//button[contains(@class,"xdsoft_prev")]').nth(0).click()
