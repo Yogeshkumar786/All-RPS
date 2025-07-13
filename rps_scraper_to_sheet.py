@@ -81,13 +81,13 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     existing_data = sheet.get_all_records()
     existing_rps_set = set(str(row.get("RPS No", "")).strip() for row in existing_data)
     #--------------------------------------------------------------
-    print("🧹 Filtering valid Closure Date and removing duplicates...")
-    df_clean = df_clean[df_clean["Closure Date"].notna() & (df_clean["Closure Date"] != "")]
-    df_clean["Closure Date"] = pd.to_datetime(df_clean["Closure Date"], errors="coerce")
+    print("🧹 Filtering valid Dispatch Date and removing duplicates...")
+    df_clean = df_clean[df_clean["Dispatch Date"].notna() & (df_clean["Dispatch Date"] != "")]
+    df_clean["Dispatch Date"] = pd.to_datetime(df_clean["Dispatch Date"], errors="coerce")
 
     # 📆 Filter for only closure dates exactly 12 days before today
     target_date = (datetime.now() - timedelta(days=12)).date()
-    df_clean = df_clean[df_clean["Closure Date"].dt.date == target_date]
+    df_clean = df_clean[df_clean["Dispatch Date"].dt.date == target_date]
 
     # 🧼 Remove RPS Numbers that are already in the sheet
     new_data = df_clean[~df_clean["RPS Number"].astype(str).isin(existing_rps_set)]
