@@ -16,7 +16,7 @@ def write_google_credentials():
     with open("credentials.json", "w") as f:
         f.write(json_key)
 
-
+# === Step 2: Download Excel from RPS page ===
 def download_and_extract_rps_data():
     print("🚀 Starting RPS extraction via Excel download...")
     download_dir = os.path.abspath("downloads")
@@ -37,32 +37,13 @@ def download_and_extract_rps_data():
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[3]/div[2]/ul/li[1]/input').click()
         page.wait_for_timeout(1000)
 
-        print("📅 Picking date 12 days ago...")
-        target_date = datetime.now() - timedelta(days=12)
-        target_day = target_date.day
-        target_month = target_date.month
-        target_year = target_date.year
-
+        print("📅 Picking date range (last 15 days)...")
+        from_date = (datetime.now() - timedelta(days=15)).day
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[1]/div[2]/input').click()
         page.wait_for_timeout(1000)
-
-        # Navigate calendar to correct month
-        for _ in range(12):
-            visible_month_text = page.locator('.xdsoft_monthpicker .xdsoft_label span').nth(0).inner_text()
-            visible_year_text = page.locator('.xdsoft_yearpicker .xdsoft_label span').nth(0).inner_text()
-            visible_month = datetime.strptime(visible_month_text, "%B").month
-            visible_year = int(visible_year_text)
-
-            if visible_month == target_month and visible_year == target_year:
-                break
-            elif visible_year > target_year or (visible_year == target_year and visible_month > target_month):
-                page.locator('.xdsoft_prev').click()
-            else:
-                page.locator('.xdsoft_next').click()
-            page.wait_for_timeout(500)
-
-        # Click the correct day
-        day_xpath = f'//td[@data-date="{target_day}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
+        page.locator('//div[contains(@class,"xdsoft_datepicker")]//button[contains(@class,"xdsoft_prev")]').nth(0).click()
+        page.wait_for_timeout(1000)
+        day_xpath = f'//td[@data-date="{from_date}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
         page.locator(day_xpath).nth(0).click()
         page.wait_for_timeout(1000)
 
@@ -81,51 +62,6 @@ def download_and_extract_rps_data():
         browser.close()
         return downloaded_file_path
 
-# === Step 2: Download Excel from RPS page ===
-# def download_and_extract_rps_data():
-#     print("🚀 Starting RPS extraction via Excel download...")
-#     download_dir = os.path.abspath("downloads")
-#     os.makedirs(download_dir, exist_ok=True)
-
-#     with sync_playwright() as p:
-#         browser = p.chromium.launch(headless=True)
-#         context = browser.new_context(accept_downloads=True)
-#         page = context.new_page()
-
-#         print("🌐 Navigating to RPS page...")
-#         page.goto("http://smart.dsmsoft.com/FMSSmartApp/Safex_RPS_Reports/RPS_Reports.aspx?usergroup=NRM.101", wait_until="load")
-#         page.wait_for_timeout(4000)
-
-#         print("🚛 Selecting all vehicles...")
-#         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[2]').click()
-#         page.wait_for_timeout(1000)
-#         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[4]/div[3]/div[2]/ul/li[1]/input').click()
-#         page.wait_for_timeout(1000)
-
-#         print("📅 Picking date range (last 15 days)...")
-#         from_date = (datetime.now() - timedelta(days=12)).day
-#         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[1]/div[2]/input').click()
-#         page.wait_for_timeout(1000)
-#         page.locator('//div[contains(@class,"xdsoft_datepicker")]//button[contains(@class,"xdsoft_prev")]').nth(0).click()
-#         page.wait_for_timeout(1000)
-#         day_xpath = f'//td[@data-date="{from_date}" and contains(@class, "xdsoft_date") and not(contains(@class, "xdsoft_disabled"))]'
-#         page.locator(day_xpath).nth(0).click()
-#         page.wait_for_timeout(1000)
-
-#         print("📤 Clicking Submit...")
-#         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[5]/div/button').click()
-#         page.wait_for_timeout(5000)
-
-#         print("📥 Clicking download button...")
-#         with page.expect_download() as download_info:
-#             page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[4]/div/table/div/div[4]/div/div/div[3]/div[1]/div/div/div').click()
-#         download = download_info.value
-#         downloaded_file_path = os.path.join(download_dir, download.suggested_filename)
-#         download.save_as(downloaded_file_path)
-#         print(f"✅ Excel downloaded to: {downloaded_file_path}")
-
-#         browser.close()
-#         return downloaded_file_path
 
 
 def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
@@ -144,10 +80,21 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("📑 Fetching existing RPS Numbers...")
     existing_data = sheet.get_all_records()
     existing_rps_set = set(str(row.get("RPS No", "")).strip() for row in existing_data)
-
-    print("🧹 Filtering out duplicates and missing Closure Date...")
+    #--------------------------------------------------------------
+    print("🧹 Filtering valid Closure Date and removing duplicates...")
     df_clean = df_clean[df_clean["Closure Date"].notna() & (df_clean["Closure Date"] != "")]
+    df_clean["Closure Date"] = pd.to_datetime(df_clean["Closure Date"], errors="coerce")
+
+    # 📆 Filter for only closure dates exactly 12 days before today
+    target_date = (datetime.now() - timedelta(days=12)).date()
+    df_clean = df_clean[df_clean["Closure Date"].dt.date == target_date]
+
+    # 🧼 Remove RPS Numbers that are already in the sheet
     new_data = df_clean[~df_clean["RPS Number"].astype(str).isin(existing_rps_set)]
+
+    # print("🧹 Filtering out duplicates and missing Closure Date...")
+    # df_clean = df_clean[df_clean["Closure Date"].notna() & (df_clean["Closure Date"] != "")]
+    # new_data = df_clean[~df_clean["RPS Number"].astype(str).isin(existing_rps_set)]
 
     if new_data.empty:
         print("ℹ️ No new RPS records to add.")
