@@ -49,9 +49,7 @@ def download_and_extract_rps_data():
 
         print("📤 Clicking Submit...")
         page.locator('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[3]/div/div[5]/div/button').click()
-
-        print("⌛ Waiting for result table to load...")
-        page.wait_for_selector('xpath=/html/body/form/div[5]/div/div/div/div/div/div/div[4]/div/table/div/div[6]/div', timeout=15000)
+        page.wait_for_timeout(5000)
 
         print("📥 Clicking download button...")
         with page.expect_download() as download_info:
@@ -64,7 +62,7 @@ def download_and_extract_rps_data():
         browser.close()
         return downloaded_file_path
 
-# === Step 3: Push Excel data to Google Sheet (skip duplicates) ===
+# === Step 3: Push Excel data to Google Sheet (skip duplicates, sort, map headers) ===
 def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("📥 Reading Excel...")
     df = pd.read_excel(excel_path)
@@ -82,31 +80,34 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     existing_data = sheet.get_all_records()
     existing_rps_set = set(str(row.get("RPS No", "")).strip() for row in existing_data)
 
-    print("🧹 Filtering out already existing rows and rows with empty Closure Date...")
-    df_clean = df_clean[df_clean["Closure Date"].astype(str).str.strip() != ""]
+    print("🧹 Filtering out already existing rows and empty Closure Date...")
+    df_clean = df_clean[df_clean["Closure Date"].notna() & (df_clean["Closure Date"] != "")]
     filtered_rows = df_clean[~df_clean["RPS Number"].astype(str).isin(existing_rps_set)]
 
     if filtered_rows.empty:
         print("ℹ️ No new RPS records to add.")
         return
 
-    print("📊 Sorting rows by Closure Date...")
-    filtered_rows["Closure Date"] = pd.to_datetime(filtered_rows["Closure Date"], errors="coerce")
-    filtered_rows = filtered_rows.sort_values("Closure Date")
-
-    print("📤 Uploading mapped RPS records...")
+    print("🧾 Mapping columns to sheet headers...")
     column_mapping = {
         "RPS Number": "RPS No",
-        "Vehicle Number": "Vehicle Number",
+        "Vehicle Number": "Vehicle_Number",
         "Dispatch Date": "Route_Start_Date_Time",
         "Closure Date": "Route_Reaching_Date_Time",
         "Transit Time(HH:MM:SS)": "Taken_Transit_Time",
         "Route Name": "Route"
     }
-    filtered_rows = filtered_rows[list(column_mapping.keys())].rename(columns=column_mapping)
+
+    filtered_rows = filtered_rows[[col for col in column_mapping.keys() if col in filtered_rows.columns]].rename(columns=column_mapping)
+
+    print("📊 Sorting by Closure Date...")
+    filtered_rows["Route_Reaching_Date_Time"] = pd.to_datetime(filtered_rows["Route_Reaching_Date_Time"], errors="coerce")
+    filtered_rows = filtered_rows.sort_values("Route_Reaching_Date_Time")
+
+    print("📤 Uploading new rows...")
     rows_to_add = filtered_rows.astype(str).values.tolist()
     sheet.append_rows(rows_to_add)
-    print(f"✅ Added {len(rows_to_add)} new rows to the sheet.")
+    print(f"✅ {len(rows_to_add)} rows added to Google Sheet.")
 
 # === MAIN ===
 if __name__ == "__main__":
