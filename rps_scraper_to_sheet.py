@@ -142,7 +142,6 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
         "Vehicle Number": "Vehicle_Number",
         "Dispatch Date": "Route_Start_Date_Time",
         "Closure Date": "Route_Reaching_Date_Time",
-        "Transit Time(HH:MM:SS)": "Taken_Transit_Time",
         "Route Name": "Route"
     }
 
