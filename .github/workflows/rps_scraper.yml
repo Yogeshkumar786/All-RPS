@@ -1,7 +1,9 @@
 name: RPS Excel to Google Sheet
 
 on:
-  workflow_dispatch:  # allows manual run from GitHub Actions tab
+  schedule:
+    - cron: "*/30 * * * *"  # runs every 30 minutes
+  workflow_dispatch:        # still allows manual trigger from Actions tab
 
 jobs:
   run-rps-scraper:
