@@ -153,10 +153,11 @@ def push_excel_to_google_sheet(excel_path, sheet_id, tab_name):
     print("🧾 Reordering and renaming columns...")
     new_data = new_data[ordered_columns]
     new_data.rename(columns=column_mapping, inplace=True)
-    
-    # ✂️ Trim whitespace from Route column
+
+    # ✂️ Remove all spaces from Route column
     if "Route" in new_data.columns:
-        new_data["Route"] = new_data["Route"].str.strip()
+        new_data["Route"] = new_data["Route"].astype(str).str.replace(" ", "").str.strip()
+
         
     print("📊 Sorting by Closure Date...")
     new_data["Route_Reaching_Date_Time"] = pd.to_datetime(new_data["Route_Reaching_Date_Time"], errors="coerce")
